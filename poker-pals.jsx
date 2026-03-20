@@ -1,35 +1,55 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 
 /* ═══════════════════════════════════════════
-   CONSTANTS & HELPERS
+   CONSTANTS
    ═══════════════════════════════════════════ */
 const SUITS = ["♠","♥","♦","♣"];
 const SUIT_COLORS = {"♠":"#2b2d42","♥":"#e63946","♦":"#e76f51","♣":"#2b2d42"};
-const SUIT_BG = {"♠":"#edf2f4","♥":"#fde8ea","♦":"#fde8ea","♣":"#edf2f4"};
 const RANKS = ["2","3","4","5","6","7","8","9","10","J","Q","K","A"];
 const RV = {2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,J:11,Q:12,K:13,A:14};
-const FACE_NAMES = {J:"Jack",Q:"Queen",K:"King",A:"Ace"};
 
 const HAND_DATA = [
-  {name:"Royal Flush",emoji:"👑",stars:10,desc:"A K Q J 10 all the same suit!",tip:"The BEST hand possible!"},
-  {name:"Straight Flush",emoji:"🌈",stars:9,desc:"5 in a row, same suit!",tip:"Almost impossible to beat!"},
-  {name:"Four of a Kind",emoji:"🍀",stars:8,desc:"4 cards with the same number!",tip:"Super rare and super strong!"},
-  {name:"Full House",emoji:"🏠",stars:7,desc:"3 of one + 2 of another!",tip:"Like a triple and a pair had a baby!"},
-  {name:"Flush",emoji:"💎",stars:6,desc:"All 5 cards same suit!",tip:"Look at the suit symbols — all matching!"},
-  {name:"Straight",emoji:"➡️",stars:5,desc:"5 cards in a row!",tip:"The numbers go in order like counting!"},
-  {name:"Three of a Kind",emoji:"🎯",stars:4,desc:"3 cards same number!",tip:"Trips! A solid hand!"},
-  {name:"Two Pair",emoji:"👯",stars:3,desc:"2 different pairs!",tip:"Double trouble for your opponent!"},
-  {name:"One Pair",emoji:"✌️",stars:2,desc:"2 cards same number!",tip:"Most common winning hand!"},
-  {name:"High Card",emoji:"☝️",stars:1,desc:"Nothing matches — biggest card counts!",tip:"Sometimes this is all you get!"},
+  {name:"Royal Flush",emoji:"👑",stars:10,desc:"A K Q J 10 all the same suit!"},
+  {name:"Straight Flush",emoji:"🌈",stars:9,desc:"5 in a row, same suit!"},
+  {name:"Four of a Kind",emoji:"🍀",stars:8,desc:"4 cards with the same number!"},
+  {name:"Full House",emoji:"🏠",stars:7,desc:"3 of one + 2 of another!"},
+  {name:"Flush",emoji:"💎",stars:6,desc:"All 5 cards same suit!"},
+  {name:"Straight",emoji:"➡️",stars:5,desc:"5 cards in a row!"},
+  {name:"Three of a Kind",emoji:"🎯",stars:4,desc:"3 cards same number!"},
+  {name:"Two Pair",emoji:"👯",stars:3,desc:"2 different pairs!"},
+  {name:"One Pair",emoji:"✌️",stars:2,desc:"2 cards same number!"},
+  {name:"High Card",emoji:"☝️",stars:1,desc:"Nothing matches — biggest card counts!"},
 ];
 
+const HAND_EXAMPLES = [
+  [{r:"A",s:"♠"},{r:"K",s:"♠"},{r:"Q",s:"♠"},{r:"J",s:"♠"},{r:"10",s:"♠"}],
+  [{r:"5",s:"♥"},{r:"6",s:"♥"},{r:"7",s:"♥"},{r:"8",s:"♥"},{r:"9",s:"♥"}],
+  [{r:"K",s:"♠"},{r:"K",s:"♥"},{r:"K",s:"♦"},{r:"K",s:"♣"},{r:"3",s:"♠"}],
+  [{r:"Q",s:"♠"},{r:"Q",s:"♥"},{r:"Q",s:"♦"},{r:"7",s:"♣"},{r:"7",s:"♠"}],
+  [{r:"2",s:"♦"},{r:"5",s:"♦"},{r:"8",s:"♦"},{r:"J",s:"♦"},{r:"A",s:"♦"}],
+  [{r:"4",s:"♠"},{r:"5",s:"♥"},{r:"6",s:"♦"},{r:"7",s:"♣"},{r:"8",s:"♠"}],
+  [{r:"9",s:"♠"},{r:"9",s:"♥"},{r:"9",s:"♦"},{r:"4",s:"♣"},{r:"J",s:"♠"}],
+  [{r:"5",s:"♠"},{r:"5",s:"♥"},{r:"J",s:"♦"},{r:"J",s:"♣"},{r:"A",s:"♠"}],
+  [{r:"8",s:"♠"},{r:"8",s:"♥"},{r:"3",s:"♦"},{r:"K",s:"♣"},{r:"A",s:"♠"}],
+  [{r:"2",s:"♠"},{r:"5",s:"♥"},{r:"9",s:"♦"},{r:"J",s:"♣"},{r:"A",s:"♠"}],
+];
+
+/* group highlight colors for matched cards */
+const GROUP_COLORS = [
+  {bg:"#dbeafe",border:"#3b82f6",glow:"#3b82f680"},
+  {bg:"#fce7f3",border:"#ec4899",glow:"#ec489980"},
+  {bg:"#d1fae5",border:"#10b981",glow:"#10b98180"},
+  {bg:"#fef3c7",border:"#f59e0b",glow:"#f59e0b80"},
+];
+
+/* ═══════════════════════════════════════════
+   DECK & EVAL HELPERS
+   ═══════════════════════════════════════════ */
 function makeDeck(){const d=[];for(const s of SUITS)for(const r of RANKS)d.push({r,s,id:r+s});return d;}
 function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[b[i],b[j]]=[b[j],b[i]];}return b;}
-function cardName(c){return `${FACE_NAMES[c.r]||c.r} of ${c.s==="♠"?"Spades":c.s==="♥"?"Hearts":c.s==="♦"?"Diamonds":"Clubs"}`;}
 
-/* ── Hand evaluator ── */
 function evalHand(cards){
-  if(!cards||cards.length<5) return {rank:-1,name:"?",hCards:[]};
+  if(!cards||cards.length<5) return {rank:-1,name:"?"};
   const sorted=[...cards].sort((a,b)=>RV[b.r]-RV[a.r]);
   const vals=sorted.map(c=>RV[c.r]);
   const suits=sorted.map(c=>c.s);
@@ -38,22 +58,21 @@ function evalHand(cards){
   const isWheel=vals[0]===14&&vals[1]===5&&vals[2]===4&&vals[3]===3&&vals[4]===2;
   const isStraight=isStr||isWheel;
   const counts={};vals.forEach(v=>counts[v]=(counts[v]||0)+1);
-  const freq=Object.entries(counts).sort((a,b)=>b[1]-a[1]||b[0]-a[0]);
-
-  if(isFlush&&isStraight&&vals[0]===14&&!isWheel) return {rank:9,name:"Royal Flush",hCards:sorted};
-  if(isFlush&&isStraight) return {rank:8,name:"Straight Flush",hCards:sorted};
-  if(freq[0][1]===4) return {rank:7,name:"Four of a Kind",hCards:sorted};
-  if(freq[0][1]===3&&freq[1][1]===2) return {rank:6,name:"Full House",hCards:sorted};
-  if(isFlush) return {rank:5,name:"Flush",hCards:sorted};
-  if(isStraight) return {rank:4,name:"Straight",hCards:sorted};
-  if(freq[0][1]===3) return {rank:3,name:"Three of a Kind",hCards:sorted};
-  if(freq[0][1]===2&&freq[1][1]===2) return {rank:2,name:"Two Pair",hCards:sorted};
-  if(freq[0][1]===2) return {rank:1,name:"One Pair",hCards:sorted};
-  return {rank:0,name:"High Card",hCards:sorted};
+  const freq=Object.values(counts).sort((a,b)=>b-a);
+  if(isFlush&&isStraight&&vals[0]===14&&!isWheel) return {rank:9,name:"Royal Flush"};
+  if(isFlush&&isStraight) return {rank:8,name:"Straight Flush"};
+  if(freq[0]===4) return {rank:7,name:"Four of a Kind"};
+  if(freq[0]===3&&freq[1]===2) return {rank:6,name:"Full House"};
+  if(isFlush) return {rank:5,name:"Flush"};
+  if(isStraight) return {rank:4,name:"Straight"};
+  if(freq[0]===3) return {rank:3,name:"Three of a Kind"};
+  if(freq[0]===2&&freq[1]===2) return {rank:2,name:"Two Pair"};
+  if(freq[0]===2) return {rank:1,name:"One Pair"};
+  return {rank:0,name:"High Card"};
 }
 
 /* ═══════════════════════════════════════════
-   HINT ENGINE — the brain of the teacher
+   HINT ENGINE — returns keep/discard + card groups
    ═══════════════════════════════════════════ */
 function analyzeHand(cards){
   const counts={};const suitCounts={};
@@ -62,232 +81,335 @@ function analyzeHand(cards){
   const vals=sorted.map(c=>RV[c.r]);
   const result=evalHand(cards);
 
-  // Already great — keep everything
-  if(result.rank>=5){
-    return {keep:cards.map(c=>c.id),discard:[],
-      hint:`WOW! You have a ${result.name}! 🎉 Don't change ANYTHING — this hand is amazing!`,
-      strength:"amazing",handName:result.name};
+  /* cardGroups: map card.id -> group index (for color coding) */
+  const cardGroups={};
+  let groupIdx=0;
+
+  /* assign groups based on what matches */
+  const pairRanks=Object.entries(counts).filter(([,v])=>v>=2).map(([k])=>k);
+  pairRanks.forEach(pr=>{
+    cards.filter(c=>c.r===pr).forEach(c=>{cardGroups[c.id]=groupIdx;});
+    groupIdx++;
+  });
+
+  /* flush grouping */
+  const flushSuit=Object.entries(suitCounts).find(([,v])=>v>=4);
+  if(flushSuit&&pairRanks.length===0){
+    cards.filter(c=>c.s===flushSuit[0]).forEach(c=>{cardGroups[c.id]=groupIdx;});
+    groupIdx++;
   }
 
-  // Four of a kind — keep the 4, discard the loner
-  if(result.rank===7){
-    const quadR=Object.entries(counts).find(([,v])=>v===4)[0];
-    const keep=cards.filter(c=>c.r===quadR).map(c=>c.id);
-    const disc=cards.filter(c=>c.r!==quadR).map(c=>c.id);
-    return {keep,discard:disc,hint:`Four of a Kind! Keep all four ${quadR}s! Toss the extra card and hope for a lucky draw!`,strength:"amazing",handName:result.name};
-  }
-
-  // Full House — keep it all
-  if(result.rank===6){
-    return {keep:cards.map(c=>c.id),discard:[],hint:`Full House! Three + Two = a very strong hand! Keep it all!`,strength:"great",handName:result.name};
-  }
-
-  // Three of a kind — keep the trips, toss 2
-  if(result.rank===3){
-    const tripR=Object.entries(counts).find(([,v])=>v===3)[0];
-    const keep=cards.filter(c=>c.r===tripR).map(c=>c.id);
-    const disc=cards.filter(c=>c.r!==tripR).map(c=>c.id);
-    return {keep,discard:disc,
-      hint:`Three ${tripR}s! 🎯 Keep your triple and throw away the other 2 cards. Maybe you'll get a Full House!`,
-      strength:"great",handName:"Three of a Kind"};
-  }
-
-  // Two Pair — keep both pairs, toss the odd one
-  if(result.rank===2){
-    const pairRanks=Object.entries(counts).filter(([,v])=>v===2).map(([k])=>k);
-    const keep=cards.filter(c=>pairRanks.includes(c.r)).map(c=>c.id);
-    const disc=cards.filter(c=>!pairRanks.includes(c.r)).map(c=>c.id);
-    return {keep,discard:disc,
-      hint:`Two pairs! Keep both pairs and toss the leftover card. You might get a Full House!`,
-      strength:"good",handName:"Two Pair"};
-  }
-
-  // One Pair — keep the pair, toss 3
-  if(result.rank===1){
-    const pairR=Object.entries(counts).find(([,v])=>v===2)[0];
-    const keep=cards.filter(c=>c.r===pairR).map(c=>c.id);
-    const disc=cards.filter(c=>c.r!==pairR).map(c=>c.id);
-    return {keep,discard:disc,
-      hint:`A pair of ${pairR}s! ✌️ Keep your pair and swap the other 3 — maybe you'll get more matches!`,
-      strength:"okay",handName:"One Pair"};
-  }
-
-  // Check for 4-card flush draw
-  const flushSuit=Object.entries(suitCounts).find(([,v])=>v===4);
-  if(flushSuit){
-    const keep=cards.filter(c=>c.s===flushSuit[0]).map(c=>c.id);
-    const disc=cards.filter(c=>c.s!==flushSuit[0]).map(c=>c.id);
-    return {keep,discard:disc,
-      hint:`Almost a Flush! 💎 You have 4 ${flushSuit[0]==="♠"?"Spades":flushSuit[0]==="♥"?"Hearts":flushSuit[0]==="♦"?"Diamonds":"Clubs"}! Keep them and throw away the odd one — you might complete it!`,
-      strength:"hopeful",handName:"Flush Draw"};
-  }
-
-  // Check for 4-card straight draw (open-ended)
+  /* straight grouping */
   const uvals=[...new Set(vals)].sort((a,b)=>a-b);
+  let straightCards=null;
   for(let i=0;i<=uvals.length-4;i++){
-    if(uvals[i+3]-uvals[i]===3||uvals[i+3]-uvals[i]===4){
-      const seqVals=uvals.slice(i,i+4);
-      const keep=[];const disc=[];
-      cards.forEach(c=>{
-        if(seqVals.includes(RV[c.r])&&!keep.some(k=>{const kc=cards.find(x=>x.id===k);return RV[kc.r]===RV[c.r];})){
-          keep.push(c.id);
-        } else disc.push(c.id);
-      });
-      if(keep.length===4&&disc.length===1){
-        return {keep,discard:disc,
-          hint:`Almost a Straight! ➡️ You have 4 cards in a row! Keep them and hope the missing number shows up!`,
-          strength:"hopeful",handName:"Straight Draw"};
-      }
+    if(uvals[i+3]-uvals[i]<=4){
+      straightCards=uvals.slice(i,i+4);break;
     }
   }
+  if(straightCards&&pairRanks.length===0&&!flushSuit){
+    cards.filter(c=>straightCards.includes(RV[c.r])).forEach(c=>{
+      if(!cardGroups[c.id]&&cardGroups[c.id]!==0){cardGroups[c.id]=groupIdx;}
+    });
+  }
 
-  // High card — keep the 2 highest, toss 3
+  /* Already great — keep everything */
+  if(result.rank>=5){
+    cards.forEach(c=>{if(!cardGroups[c.id]&&cardGroups[c.id]!==0)cardGroups[c.id]=0;});
+    return {keep:cards.map(c=>c.id),discard:[],
+      coachEmoji:"🤩",coachLine:"WOW! Don't change anything!",
+      strength:result.rank/9,handName:result.name,cardGroups};
+  }
+  if(result.rank===7){
+    const quadR=Object.entries(counts).find(([,v])=>v===4)[0];
+    return {keep:cards.filter(c=>c.r===quadR).map(c=>c.id),
+      discard:cards.filter(c=>c.r!==quadR).map(c=>c.id),
+      coachEmoji:"🤩",coachLine:"Four matches! Swap the loner!",
+      strength:0.85,handName:result.name,cardGroups};
+  }
+  if(result.rank===6){
+    return {keep:cards.map(c=>c.id),discard:[],
+      coachEmoji:"😍",coachLine:"Full House! Keep them all!",
+      strength:0.75,handName:result.name,cardGroups};
+  }
+  if(result.rank===3){
+    const tripR=Object.entries(counts).find(([,v])=>v===3)[0];
+    return {keep:cards.filter(c=>c.r===tripR).map(c=>c.id),
+      discard:cards.filter(c=>c.r!==tripR).map(c=>c.id),
+      coachEmoji:"😊",coachLine:"Triple! Swap the other two!",
+      strength:0.55,handName:"Three of a Kind",cardGroups};
+  }
+  if(result.rank===2){
+    const prs=Object.entries(counts).filter(([,v])=>v===2).map(([k])=>k);
+    return {keep:cards.filter(c=>prs.includes(c.r)).map(c=>c.id),
+      discard:cards.filter(c=>!prs.includes(c.r)).map(c=>c.id),
+      coachEmoji:"😊",coachLine:"Two pairs! Swap the odd one!",
+      strength:0.4,handName:"Two Pair",cardGroups};
+  }
+  if(result.rank===1){
+    const pairR=Object.entries(counts).find(([,v])=>v===2)[0];
+    return {keep:cards.filter(c=>c.r===pairR).map(c=>c.id),
+      discard:cards.filter(c=>c.r!==pairR).map(c=>c.id),
+      coachEmoji:"🙂",coachLine:"A pair! Swap the other three!",
+      strength:0.25,handName:"One Pair",cardGroups};
+  }
+  if(flushSuit){
+    return {keep:cards.filter(c=>c.s===flushSuit[0]).map(c=>c.id),
+      discard:cards.filter(c=>c.s!==flushSuit[0]).map(c=>c.id),
+      coachEmoji:"🤔",coachLine:"Almost a flush! Swap the odd one!",
+      strength:0.2,handName:"Flush Draw",cardGroups};
+  }
+  if(straightCards){
+    const keepIds=[];const discIds=[];
+    cards.forEach(c=>{
+      if(straightCards.includes(RV[c.r])&&!keepIds.some(k=>{const kc=cards.find(x=>x.id===k);return kc&&RV[kc.r]===RV[c.r];})){
+        keepIds.push(c.id);
+      } else discIds.push(c.id);
+    });
+    if(keepIds.length===4&&discIds.length===1){
+      return {keep:keepIds,discard:discIds,
+        coachEmoji:"🤔",coachLine:"Almost a straight! Swap one!",
+        strength:0.15,handName:"Straight Draw",cardGroups};
+    }
+  }
   const keepCards=sorted.slice(0,2).map(c=>c.id);
   const discCards=sorted.slice(2).map(c=>c.id);
-  const highName=FACE_NAMES[sorted[0].r]||sorted[0].r;
   return {keep:keepCards,discard:discCards,
-    hint:`No matches yet! Keep your 2 biggest cards (${highName} is your best!) and swap the rest. Fresh cards = fresh chances! 🤞`,
-    strength:"weak",handName:"High Card"};
+    coachEmoji:"😬",coachLine:"No matches. Swap three!",
+    strength:0.05,handName:"High Card",cardGroups};
 }
 
-/* CPU discard AI */
-function cpuDiscard(cards){
-  const a=analyzeHand(cards);
-  return a.discard;
+function cpuDiscard(cards){return analyzeHand(cards).discard;}
+
+/* ═══════════════════════════════════════════
+   CSS ANIMATIONS (injected once)
+   ═══════════════════════════════════════════ */
+const GLOBAL_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Lilita+One&display=swap');
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+
+@keyframes floatUp {
+  0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)}
 }
+@keyframes sinkDown {
+  0%,100%{transform:translateY(0)} 50%{transform:translateY(8px)}
+}
+@keyframes popIn {
+  from{opacity:0;transform:scale(0.7) translateY(16px)}
+  to{opacity:1;transform:scale(1) translateY(0)}
+}
+@keyframes selectedBounce {
+  0%,100%{transform:translateY(14px) scale(0.93)} 50%{transform:translateY(18px) scale(0.91)}
+}
+@keyframes bigEmoji {
+  0%{transform:scale(0.3) rotate(-20deg);opacity:0}
+  60%{transform:scale(1.15) rotate(5deg);opacity:1}
+  100%{transform:scale(1) rotate(0deg);opacity:1}
+}
+@keyframes meterFill {
+  from{height:0%} to{height:var(--target-height)}
+}
+@keyframes confetti {
+  0%{opacity:1;transform:translateY(0) rotate(0deg) scale(1)}
+  100%{opacity:0;transform:translateY(-160px) rotate(360deg) scale(0.2)}
+}
+@keyframes fadeUp {
+  from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)}
+}
+@keyframes pulse {
+  0%,100%{box-shadow:0 0 0 0 var(--pulse-color,#3b82f644)}
+  50%{box-shadow:0 0 0 10px var(--pulse-color,#3b82f600)}
+}
+@keyframes bounce {
+  0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)}
+}
+`;
 
 /* ═══════════════════════════════════════════
    COMPONENTS
    ═══════════════════════════════════════════ */
-const fonts = `@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Lilita+One&family=Gaegu:wght@400;700&display=swap');`;
 
-const STRENGTH_COLORS = {
-  amazing: {bg:"#d4edda",border:"#2a9d8f",text:"#155724",glow:"#2a9d8f"},
-  great:   {bg:"#d4edda",border:"#38b000",text:"#155724",glow:"#38b000"},
-  good:    {bg:"#fff3cd",border:"#ffc107",text:"#856404",glow:"#ffc107"},
-  okay:    {bg:"#fff3cd",border:"#f4a261",text:"#856404",glow:"#f4a261"},
-  hopeful: {bg:"#e8daef",border:"#7209b7",text:"#4a235a",glow:"#7209b7"},
-  weak:    {bg:"#fde8ea",border:"#e63946",text:"#721c24",glow:"#e63946"},
-};
+function PlayingCard({card,faceDown,action,groupColor,selected,onClick,disabled,animDelay=0}){
+  /* action: "keep" | "discard" | "selected" | null */
+  const isKeep=action==="keep";
+  const isDiscard=action==="discard";
+  const isSel=action==="selected"||selected;
 
-function PlayingCard({card,faceDown,selected,hintDiscard,hintKeep,onClick,disabled,isNew,delay=0}){
-  const w=78,h=112;
-  let borderColor="#d4cfc0";let shadow="0 3px 10px #00000015";let glow="";let transform="";
-  if(selected){borderColor="#f72585";shadow="0 0 18px #f7258588";transform="translateY(-10px) scale(1.06)";}
-  else if(hintDiscard){borderColor="#e6394688";shadow="0 0 14px #e6394644";glow="inset 0 0 20px #e639460e";}
-  else if(hintKeep){borderColor="#2a9d8f88";shadow="0 0 14px #2a9d8f44";glow="inset 0 0 20px #2a9d8f0e";}
+  let bg="#fffef5";
+  let border="#d4cfc0";
+  let shadow="0 3px 10px #00000018";
+  let anim="";
+  let extraStyle={};
+
+  if(faceDown){
+    bg="linear-gradient(135deg,#4361ee,#7209b7)";border="#3a50d4";
+  } else if(isSel){
+    bg="#fde8ea";border="#e63946";shadow="0 6px 20px #e6394644";
+    anim="selectedBounce 1.2s ease-in-out infinite";
+  } else if(isKeep&&groupColor){
+    bg=groupColor.bg;border=groupColor.border;shadow=`0 0 16px ${groupColor.glow}`;
+    anim="floatUp 2s ease-in-out infinite";
+    extraStyle={"--pulse-color":groupColor.glow};
+  } else if(isKeep){
+    bg="#d1fae5";border="#10b981";shadow="0 0 14px #10b98155";
+    anim="floatUp 2s ease-in-out infinite";
+  } else if(isDiscard){
+    bg="#f3f4f6";border="#d1d5db";shadow="0 2px 6px #00000010";
+    anim="sinkDown 1.5s ease-in-out infinite";
+    extraStyle={opacity:0.6,filter:"saturate(0.3)"};
+  }
 
   return (
     <div onClick={disabled?undefined:onClick} style={{
-      width:w,height:h,borderRadius:14,display:"flex",flexDirection:"column",
+      width:74,height:106,borderRadius:14,display:"flex",flexDirection:"column",
       alignItems:"center",justifyContent:"center",cursor:disabled?"default":onClick?"pointer":"default",
-      background:faceDown?"linear-gradient(135deg,#4361ee,#7209b7)":"#fffef5",
-      border:`3px solid ${faceDown?"#3a50d4":borderColor}`,
-      boxShadow:shadow,transition:"all 0.3s cubic-bezier(.34,1.56,.64,1)",
-      transform,fontFamily:"'Fredoka',sans-serif",userSelect:"none",flexShrink:0,
-      position:"relative",overflow:"hidden",
-      animation:isNew?`cardPop 0.4s ${delay}ms both`:undefined,
+      background:bg,border:`3px solid ${border}`,boxShadow:shadow,
+      animation:anim?`popIn 0.4s ${animDelay}ms both, ${anim}`:(`popIn 0.4s ${animDelay}ms both`),
+      fontFamily:"'Fredoka',sans-serif",userSelect:"none",flexShrink:0,
+      position:"relative",transition:"background 0.3s, border 0.3s, opacity 0.3s",
+      ...extraStyle,
     }}>
       {faceDown?(
-        <div style={{fontSize:36,opacity:0.8}}>🂠</div>
+        <div style={{fontSize:32,opacity:0.8}}>🂠</div>
       ):(
         <>
-          {hintDiscard && !selected && (
-            <div style={{position:"absolute",top:4,right:6,fontSize:12,opacity:0.7}}>👋</div>
-          )}
-          {hintKeep && !selected && (
-            <div style={{position:"absolute",top:4,right:6,fontSize:12,opacity:0.7}}>✅</div>
-          )}
           <div style={{fontSize:22,fontWeight:700,color:SUIT_COLORS[card.s],lineHeight:1}}>{card.r}</div>
           <div style={{fontSize:28,lineHeight:1,marginTop:2}}>{card.s}</div>
-          {selected && (
-            <div style={{position:"absolute",bottom:4,fontSize:10,color:"#f72585",fontWeight:700,letterSpacing:0.5}}>
-              SWAP
-            </div>
-          )}
+          {isSel&&<div style={{
+            position:"absolute",bottom:4,left:0,right:0,textAlign:"center",
+            fontSize:10,fontWeight:700,color:"#e63946",letterSpacing:1,
+          }}>SWAP</div>}
+          {isDiscard&&!isSel&&<div style={{
+            position:"absolute",bottom:6,left:0,right:0,textAlign:"center",fontSize:16,
+          }}>👋</div>}
+          {isKeep&&<div style={{
+            position:"absolute",top:4,right:5,fontSize:14,
+          }}>✨</div>}
         </>
       )}
     </div>
   );
 }
 
-function CoachBubble({text,strength,emoji="🐻",show=true}){
-  const c=STRENGTH_COLORS[strength]||{bg:"#f0f4ff",border:"#4361ee",text:"#1a1a2e"};
-  if(!show) return null;
+function CoachFace({emoji,line,bgColor}){
   return (
     <div style={{
-      display:"flex",gap:12,alignItems:"flex-start",
-      animation:"fadeUp 0.4s both",marginBottom:12,
+      display:"flex",alignItems:"center",gap:14,
+      background:bgColor||"#f0f4ff",borderRadius:24,padding:"12px 20px",
+      marginBottom:14,animation:"fadeUp 0.4s both",
+      border:"2.5px solid #e8e8e8",
     }}>
       <div style={{
-        width:48,height:48,borderRadius:"50%",background:"#fff3cd",
-        display:"flex",alignItems:"center",justifyContent:"center",
-        fontSize:28,flexShrink:0,border:"3px solid #f4a261",
-        boxShadow:"0 3px 10px #00000015",
+        fontSize:52,lineHeight:1,flexShrink:0,
+        animation:"bigEmoji 0.5s both",
       }}>{emoji}</div>
       <div style={{
-        flex:1,background:c.bg,border:`2.5px solid ${c.border}`,
-        borderRadius:"4px 18px 18px 18px",padding:"12px 16px",
-        fontFamily:"'Fredoka'",fontSize:15,color:c.text,lineHeight:1.55,
-        boxShadow:"0 3px 12px #00000010",
-      }}>{text}</div>
+        fontFamily:"'Lilita One'",fontSize:19,color:"#1a1a2e",
+        lineHeight:1.3,
+      }}>{line}</div>
     </div>
   );
 }
 
-function ChipStack({chips}){
+function StrengthMeter({value}){
+  /* value 0-1 */
+  const pct=Math.max(5,Math.min(100,Math.round(value*100)));
+  const hue=value*120; /* 0=red, 60=yellow, 120=green */
+  const color=`hsl(${hue},75%,50%)`;
+  const bgColor=`hsl(${hue},75%,92%)`;
+  const labels=[
+    {min:0,emoji:"😬",text:"Weak"},
+    {min:0.15,emoji:"🤔",text:"Okay"},
+    {min:0.35,emoji:"🙂",text:"Good"},
+    {min:0.55,emoji:"😊",text:"Great"},
+    {min:0.75,emoji:"🤩",text:"WOW!"},
+  ];
+  const label=labels.slice().reverse().find(l=>value>=l.min)||labels[0];
+
   return (
-    <div style={{
-      display:"inline-flex",alignItems:"center",gap:6,
-      background:"#1a5c38",padding:"6px 16px",borderRadius:30,
-      border:"2px solid #c9a85c",
-    }}>
-      <span style={{fontSize:18}}>🪙</span>
-      <span style={{fontFamily:"'Lilita One'",fontSize:20,color:"#ffd60a"}}>${chips}</span>
+    <div style={{display:"flex",alignItems:"center",gap:10}}>
+      <div style={{
+        width:36,height:120,borderRadius:18,background:"#e5e7eb",
+        position:"relative",overflow:"hidden",border:"2px solid #d1d5db",
+      }}>
+        <div style={{
+          position:"absolute",bottom:0,left:0,right:0,
+          background:`linear-gradient(to top, ${color}, ${bgColor})`,
+          borderRadius:16,transition:"height 0.8s cubic-bezier(.34,1.56,.64,1)",
+          height:`${pct}%`,
+        }}/>
+      </div>
+      <div style={{textAlign:"center"}}>
+        <div style={{fontSize:28}}>{label.emoji}</div>
+        <div style={{fontFamily:"'Lilita One'",fontSize:13,color}}>{label.text}</div>
+      </div>
     </div>
   );
 }
 
-function Btn({children,onClick,color="#4361ee",disabled,size="md",outline}){
+function BigButton({children,onClick,color="#2a9d8f",disabled}){
   return (
     <button onClick={onClick} disabled={disabled} style={{
-      fontFamily:"'Lilita One'",fontSize:size==="lg"?22:size==="sm"?14:17,
-      padding:size==="lg"?"14px 36px":size==="sm"?"8px 18px":"11px 26px",
-      background:disabled?"#ccc":outline?"transparent":color,
-      color:outline?color:disabled?"#888":"#fff",
-      border:outline?`2.5px solid ${color}`:"none",borderRadius:50,
+      fontFamily:"'Lilita One'",fontSize:24,
+      padding:"18px 48px",background:disabled?"#ccc":color,
+      color:disabled?"#888":"#fff",border:"none",borderRadius:60,
       cursor:disabled?"not-allowed":"pointer",
-      boxShadow:disabled?"none":"0 4px 14px #00000018",
-      transition:"all 0.15s",letterSpacing:0.5,
+      boxShadow:disabled?"none":`0 6px 24px ${color}44`,
+      transition:"all 0.15s",letterSpacing:0.5,width:"100%",maxWidth:340,
+      animation:"fadeUp 0.4s both",
     }}>{children}</button>
   );
 }
 
-/* ═══════════════════════════════════════════
-   SCREENS
-   ═══════════════════════════════════════════ */
+function SmallBtn({children,onClick,color="#888"}){
+  return (
+    <button onClick={onClick} style={{
+      fontFamily:"'Fredoka'",fontSize:14,fontWeight:600,
+      padding:"8px 18px",background:"transparent",
+      color,border:`2px solid ${color}`,borderRadius:30,
+      cursor:"pointer",transition:"all 0.15s",
+    }}>{children}</button>
+  );
+}
 
-/* ── HOME ── */
+function ChipDisplay({label,chips,color}){
+  return (
+    <div style={{textAlign:"center"}}>
+      <div style={{fontFamily:"'Fredoka'",fontSize:11,color:"#fff9",marginBottom:2}}>{label}</div>
+      <div style={{
+        display:"inline-flex",alignItems:"center",gap:4,
+        background:"#00000044",padding:"4px 14px",borderRadius:20,
+      }}>
+        <span style={{fontSize:14}}>🪙</span>
+        <span style={{fontFamily:"'Lilita One'",fontSize:18,color:color||"#ffd60a"}}>${chips}</span>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   HOME SCREEN
+   ═══════════════════════════════════════════ */
 function HomeScreen({onNav,stats}){
   return (
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:20,padding:"24px 16px"}}>
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:22,padding:"28px 16px"}}>
       <div style={{textAlign:"center"}}>
-        <div style={{fontSize:64,marginBottom:4,animation:"bounce 2s infinite"}}>🐻</div>
-        <h1 style={{fontFamily:"'Lilita One'",fontSize:34,color:"#1a1a2e",margin:0}}>Poker Pals</h1>
-        <p style={{fontFamily:"'Fredoka'",fontSize:15,color:"#888",margin:"4px 0 0"}}>Learn Five Card Draw with Coach Bear!</p>
+        <div style={{fontSize:72,animation:"bounce 2s infinite"}}>🐻</div>
+        <h1 style={{fontFamily:"'Lilita One'",fontSize:36,color:"#1a1a2e",margin:"4px 0 0"}}>Poker Pals</h1>
+        <p style={{fontFamily:"'Fredoka'",fontSize:15,color:"#888",margin:"4px 0 0"}}>Learn cards with Coach Bear!</p>
       </div>
 
       <div style={{display:"flex",flexDirection:"column",gap:12,width:"100%",maxWidth:360}}>
         {[
-          {key:"play",emoji:"🎮",label:"Play & Learn!",desc:"Coach Bear guides every move",color:"#2a9d8f"},
-          {key:"hands",emoji:"📚",label:"Hand Rankings",desc:"See all the hands from best to worst",color:"#4361ee"},
-          {key:"quiz",emoji:"🧠",label:"Quiz Time!",desc:"Which hand wins? Test yourself!",color:"#7209b7"},
-        ].map(item=>(
+          {key:"play",emoji:"🎮",label:"Play & Learn!",desc:"Coach Bear helps every move",color:"#2a9d8f"},
+          {key:"hands",emoji:"📚",label:"Hand Rankings",desc:"Best to worst — tap to see!",color:"#4361ee"},
+          {key:"quiz",emoji:"🧠",label:"Quiz Time!",desc:"Pick the winning hand!",color:"#7209b7"},
+        ].map((item,i)=>(
           <div key={item.key} onClick={()=>onNav(item.key)} style={{
             display:"flex",alignItems:"center",gap:16,padding:"18px 22px",
             background:"#fff",borderRadius:22,cursor:"pointer",
             border:"2.5px solid #eee",boxShadow:"0 3px 14px #00000008",
-            transition:"all 0.2s",
+            transition:"all 0.2s",animation:`fadeUp 0.4s ${i*100}ms both`,
           }}
             onMouseEnter={e=>{e.currentTarget.style.transform="translateX(6px)";e.currentTarget.style.borderColor=item.color;}}
             onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.borderColor="#eee";}}
@@ -310,43 +432,33 @@ function HomeScreen({onNav,stats}){
           fontFamily:"'Fredoka'",fontSize:14,color:"#555",
           border:"2px solid #eee",display:"flex",gap:20,flexWrap:"wrap",justifyContent:"center",
         }}>
-          {stats.handsPlayed>0&&<span>🎮 <b style={{color:"#2a9d8f"}}>{stats.handsPlayed}</b> hands played</span>}
+          {stats.handsPlayed>0&&<span>🎮 <b style={{color:"#2a9d8f"}}>{stats.handsPlayed}</b> played</span>}
           {stats.wins>0&&<span>🏆 <b style={{color:"#4361ee"}}>{stats.wins}</b> wins</span>}
-          {stats.quizTotal>0&&<span>🧠 <b style={{color:"#7209b7"}}>{stats.quizCorrect}/{stats.quizTotal}</b> quiz</span>}
-        </div>)}
-      </div>
+          {stats.quizTotal>0&&<span>🧠 <b style={{color:"#7209b7"}}>{stats.quizCorrect}{"/"}{stats.quizTotal}</b></span>}
+        </div>
+      )}
     </div>
   );
 }
 
-/* ── HAND RANKINGS ── */
+/* ═══════════════════════════════════════════
+   HAND RANKINGS SCREEN
+   ═══════════════════════════════════════════ */
 function HandsScreen({onBack}){
   const [open,setOpen]=useState(null);
-  const examples=[
-    [{r:"A",s:"♠"},{r:"K",s:"♠"},{r:"Q",s:"♠"},{r:"J",s:"♠"},{r:"10",s:"♠"}],
-    [{r:"5",s:"♥"},{r:"6",s:"♥"},{r:"7",s:"♥"},{r:"8",s:"♥"},{r:"9",s:"♥"}],
-    [{r:"K",s:"♠"},{r:"K",s:"♥"},{r:"K",s:"♦"},{r:"K",s:"♣"},{r:"3",s:"♠"}],
-    [{r:"Q",s:"♠"},{r:"Q",s:"♥"},{r:"Q",s:"♦"},{r:"7",s:"♣"},{r:"7",s:"♠"}],
-    [{r:"2",s:"♦"},{r:"5",s:"♦"},{r:"8",s:"♦"},{r:"J",s:"♦"},{r:"A",s:"♦"}],
-    [{r:"4",s:"♠"},{r:"5",s:"♥"},{r:"6",s:"♦"},{r:"7",s:"♣"},{r:"8",s:"♠"}],
-    [{r:"9",s:"♠"},{r:"9",s:"♥"},{r:"9",s:"♦"},{r:"4",s:"♣"},{r:"J",s:"♠"}],
-    [{r:"5",s:"♠"},{r:"5",s:"♥"},{r:"J",s:"♦"},{r:"J",s:"♣"},{r:"A",s:"♠"}],
-    [{r:"8",s:"♠"},{r:"8",s:"♥"},{r:"3",s:"♦"},{r:"K",s:"♣"},{r:"A",s:"♠"}],
-    [{r:"2",s:"♠"},{r:"5",s:"♥"},{r:"9",s:"♦"},{r:"J",s:"♣"},{r:"A",s:"♠"}],
-  ];
   return (
     <div style={{padding:16}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-        <Btn onClick={onBack} color="#888" size="sm">← Back</Btn>
+        <SmallBtn onClick={onBack}>← Back</SmallBtn>
         <h2 style={{fontFamily:"'Lilita One'",fontSize:22,color:"#4361ee",margin:0}}>📚 Hand Rankings</h2>
       </div>
-      <CoachBubble text="Here are ALL the poker hands from BEST ⬆️ to WORST ⬇️. Tap any hand to see what it looks like!" strength="good" />
+      <CoachFace emoji="🐻" line="Best hands on top! Tap to see cards!" bgColor="#dbeafe"/>
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {HAND_DATA.map((h,i)=>(
           <div key={i} onClick={()=>setOpen(open===i?null:i)} style={{
             background:"#fff",borderRadius:18,padding:"14px 16px",cursor:"pointer",
             border:open===i?"3px solid #4361ee":"2.5px solid #eee",
-            boxShadow:open===i?"0 4px 20px #4361ee1a":"0 2px 8px #00000008",transition:"all 0.2s",
+            transition:"all 0.2s",animation:`fadeUp 0.3s ${i*40}ms both`,
           }}>
             <div style={{display:"flex",alignItems:"center",gap:10}}>
               <div style={{
@@ -359,13 +471,15 @@ function HandsScreen({onBack}){
                 <div style={{fontFamily:"'Lilita One'",fontSize:16,color:"#1a1a2e"}}>{h.emoji} {h.name}</div>
                 <div style={{fontFamily:"'Fredoka'",fontSize:13,color:"#888"}}>{h.desc}</div>
               </div>
+              <div style={{display:"flex",gap:1}}>
+                {Array.from({length:5},(_,j)=>(
+                  <span key={j} style={{fontSize:12,opacity:j<Math.ceil(h.stars/2)?1:0.15}}>⭐</span>
+                ))}
+              </div>
             </div>
             {open===i&&(
-              <div style={{marginTop:12}}>
-                <div style={{display:"flex",gap:5,justifyContent:"center",flexWrap:"wrap",marginBottom:8}}>
-                  {examples[i].map((c,j)=><PlayingCard key={j} card={c}/>)}
-                </div>
-                <div style={{fontFamily:"'Fredoka'",fontSize:13,color:"#4361ee",textAlign:"center",fontStyle:"italic"}}>{h.tip}</div>
+              <div style={{display:"flex",gap:5,justifyContent:"center",flexWrap:"wrap",marginTop:12}}>
+                {HAND_EXAMPLES[i].map((c,j)=><PlayingCard key={j} card={c} animDelay={j*60}/>)}
               </div>
             )}
           </div>
@@ -375,24 +489,13 @@ function HandsScreen({onBack}){
   );
 }
 
-/* ── QUIZ ── */
+/* ═══════════════════════════════════════════
+   QUIZ SCREEN
+   ═══════════════════════════════════════════ */
 function QuizScreen({onBack,onScore}){
   const [round,setRound]=useState(null);
   const [choice,setChoice]=useState(null);
   const [streak,setStreak]=useState(0);
-
-  const examples=[
-    [{r:"A",s:"♠"},{r:"K",s:"♠"},{r:"Q",s:"♠"},{r:"J",s:"♠"},{r:"10",s:"♠"}],
-    [{r:"5",s:"♥"},{r:"6",s:"♥"},{r:"7",s:"♥"},{r:"8",s:"♥"},{r:"9",s:"♥"}],
-    [{r:"K",s:"♠"},{r:"K",s:"♥"},{r:"K",s:"♦"},{r:"K",s:"♣"},{r:"3",s:"♠"}],
-    [{r:"Q",s:"♠"},{r:"Q",s:"♥"},{r:"Q",s:"♦"},{r:"7",s:"♣"},{r:"7",s:"♠"}],
-    [{r:"2",s:"♦"},{r:"5",s:"♦"},{r:"8",s:"♦"},{r:"J",s:"♦"},{r:"A",s:"♦"}],
-    [{r:"4",s:"♠"},{r:"5",s:"♥"},{r:"6",s:"♦"},{r:"7",s:"♣"},{r:"8",s:"♠"}],
-    [{r:"9",s:"♠"},{r:"9",s:"♥"},{r:"9",s:"♦"},{r:"4",s:"♣"},{r:"J",s:"♠"}],
-    [{r:"5",s:"♠"},{r:"5",s:"♥"},{r:"J",s:"♦"},{r:"J",s:"♣"},{r:"A",s:"♠"}],
-    [{r:"8",s:"♠"},{r:"8",s:"♥"},{r:"3",s:"♦"},{r:"K",s:"♣"},{r:"A",s:"♠"}],
-    [{r:"2",s:"♠"},{r:"5",s:"♥"},{r:"9",s:"♦"},{r:"J",s:"♣"},{r:"A",s:"♠"}],
-  ];
 
   const newRound=useCallback(()=>{
     const i1=Math.floor(Math.random()*10);let i2=i1;while(i2===i1)i2=Math.floor(Math.random()*10);
@@ -407,34 +510,37 @@ function QuizScreen({onBack,onScore}){
   return (
     <div style={{padding:16}}>
       <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
-        <Btn onClick={onBack} color="#888" size="sm">← Back</Btn>
-        <h2 style={{fontFamily:"'Lilita One'",fontSize:22,color:"#7209b7",margin:0}}>🧠 Which Hand Wins?</h2>
+        <SmallBtn onClick={onBack}>← Back</SmallBtn>
+        <h2 style={{fontFamily:"'Lilita One'",fontSize:22,color:"#7209b7",margin:0}}>🧠 Which Wins?</h2>
       </div>
-      {streak>=3&&<div style={{textAlign:"center",fontFamily:"'Lilita One'",color:"#e63946",fontSize:18,marginBottom:8}}>🔥 {streak} in a row!</div>}
-      <CoachBubble text={choice?choice===correct?"You got it! 🎉":"Not quite — the hand that's harder to get is the winner! Look at the rankings if you need help.":"Tap the hand you think would WIN in a showdown!"} strength={choice?choice===correct?"great":"weak":"good"} />
+      {streak>=3&&<div style={{textAlign:"center",fontFamily:"'Lilita One'",color:"#e63946",fontSize:20,marginBottom:8}}>🔥 {streak} in a row!</div>}
+      <CoachFace
+        emoji={!choice?"🤔":choice===correct?"🎉":"🐻"}
+        line={!choice?"Tap the winner!":choice===correct?"You got it!":"The rarer hand wins!"}
+        bgColor={!choice?"#fef3c7":choice===correct?"#d1fae5":"#fde8ea"}
+      />
       <div style={{display:"flex",flexDirection:"column",gap:14}}>
         {["a","b"].map(side=>{
           const idx=round[side];const h=HAND_DATA[idx];
           const isRight=choice&&side===correct;const isWrong=choice&&side===choice&&side!==correct;
           return (
             <div key={side} onClick={()=>pick(side)} style={{
-              background:isRight?"#d4edda":isWrong?"#f8d7da":"#fff",
-              border:isRight?"3px solid #2a9d8f":isWrong?"3px solid #e63946":"2.5px solid #ddd",
-              borderRadius:20,padding:18,cursor:choice?"default":"pointer",textAlign:"center",
-              transition:"all 0.2s",transform:choice?isRight?"scale(1.02)":"scale(0.98)":"none",
+              background:isRight?"#d1fae5":isWrong?"#fde8ea":"#fff",
+              border:isRight?"3px solid #10b981":isWrong?"3px solid #e63946":"2.5px solid #ddd",
+              borderRadius:20,padding:16,cursor:choice?"default":"pointer",textAlign:"center",
+              transition:"all 0.3s",transform:choice?isRight?"scale(1.02)":"scale(0.97)":"none",
             }}>
               <div style={{fontFamily:"'Lilita One'",fontSize:18,color:"#1a1a2e",marginBottom:8}}>{h.emoji} {h.name}</div>
-              <div style={{display:"flex",gap:5,justifyContent:"center",flexWrap:"wrap",marginBottom:6}}>
-                {examples[idx].map((c,j)=><PlayingCard key={j} card={c}/>)}
+              <div style={{display:"flex",gap:5,justifyContent:"center",flexWrap:"wrap"}}>
+                {HAND_EXAMPLES[idx].map((c,j)=><PlayingCard key={j} card={c} animDelay={j*50}/>)}
               </div>
-              <div style={{fontFamily:"'Fredoka'",fontSize:13,color:"#888"}}>{h.desc}</div>
             </div>
           );
         })}
       </div>
       {choice&&(
         <div style={{textAlign:"center",marginTop:18}}>
-          <Btn onClick={newRound} color="#7209b7" size="lg">Next Question →</Btn>
+          <BigButton onClick={newRound} color="#7209b7">Next! →</BigButton>
         </div>
       )}
     </div>
@@ -442,11 +548,12 @@ function QuizScreen({onBack,onScore}){
 }
 
 /* ═══════════════════════════════════════════
-   PLAY SCREEN — Five Card Draw with Coach
+   PLAY SCREEN — Five Card Draw, one-button flow
    ═══════════════════════════════════════════ */
+
+/* phases: ready → dealt → showdown */
 function PlayScreen({onBack,onResult}){
   const [phase,setPhase]=useState("ready");
-  // ready → dealt → discarding → drawing → showdown
   const [deck,setDeck]=useState([]);
   const [myCards,setMyCards]=useState([]);
   const [cpuCards,setCpuCards]=useState([]);
@@ -455,310 +562,303 @@ function PlayScreen({onBack,onResult}){
   const [cpuChips,setCpuChips]=useState(100);
   const [pot,setPot]=useState(0);
   const [analysis,setAnalysis]=useState(null);
-  const [coachMsg,setCoachMsg]=useState({text:"Hey there! 🐻 Ready to play some Five Card Draw? I'll help you every step of the way! Tap Deal to start!",strength:"good",emoji:"🐻"});
-  const [showHints,setShowHints]=useState(true);
+  const [postSwapAnalysis,setPostSwapAnalysis]=useState(null);
   const [result,setResult]=useState(null);
-  const [cpuDiscarded,setCpuDiscarded]=useState(0);
-  const [isNew,setIsNew]=useState(false);
+  const [cpuDiscardCount,setCpuDiscardCount]=useState(0);
+  const [swapped,setSwapped]=useState(false);
+  const [coachState,setCoachState]=useState({emoji:"🐻",line:"Ready to play?",bg:"#f0f4ff"});
+  const [animKey,setAnimKey]=useState(0);
+
+  const currentAnalysis=swapped?postSwapAnalysis:analysis;
 
   const deal=()=>{
     const d=shuffle(makeDeck());
     const my=d.slice(0,5);const cpu=d.slice(5,10);
     setMyCards(my);setCpuCards(cpu);setDeck(d.slice(10));
-    setSelected(new Set());setResult(null);setCpuDiscarded(0);setIsNew(true);
-    const ante=5;
-    setMyChips(c=>c-ante);setCpuChips(c=>c-ante);setPot(ante*2);
-    setPhase("dealt");
-    setTimeout(()=>{
-      const a=analyzeHand(my);
-      setAnalysis(a);
-      setCoachMsg({
-        text:`You got your 5 cards! Let me take a look... You have: ${a.handName}! ${a.hint}`,
-        strength:a.strength,emoji:"🐻",
-      });
-      setIsNew(false);
-    },600);
+    setSelected(new Set());setResult(null);setCpuDiscardCount(0);
+    setSwapped(false);setPostSwapAnalysis(null);
+    setMyChips(c=>c-5);setCpuChips(c=>c-5);setPot(10);
+    setPhase("dealt");setAnimKey(k=>k+1);
+    const a=analyzeHand(my);
+    setAnalysis(a);
+    setCoachState({emoji:a.coachEmoji,line:a.coachLine,bg:
+      a.strength>0.5?"#d1fae5":a.strength>0.2?"#fef3c7":"#fde8ea"});
   };
 
   const toggleCard=(id)=>{
-    if(phase!=="dealt"&&phase!=="discarding") return;
-    setPhase("discarding");
+    if(phase!=="dealt"||swapped) return;
     const s=new Set(selected);
-    if(s.has(id))s.delete(id);else{if(s.size>=3){setCoachMsg({text:"You can only swap up to 3 cards! Tap a selected card to unselect it.",strength:"weak",emoji:"🐻"});return;}s.add(id);}
+    if(s.has(id))s.delete(id);else{
+      if(s.size>=3){setCoachState({emoji:"🙅",line:"Only swap up to 3!",bg:"#fde8ea"});return;}
+      s.add(id);
+    }
     setSelected(s);
-    // Update coach based on selection
+
     if(analysis){
       const selArr=[...s];
-      const allHintDisc=selArr.every(id=>analysis.discard.includes(id));
-      const selHintKeep=selArr.some(id=>analysis.keep.includes(id));
+      const allGood=selArr.every(id2=>analysis.discard.includes(id2));
+      const pickedKeep=selArr.some(id2=>analysis.keep.includes(id2));
       if(s.size===0){
-        setCoachMsg({text:`Tap the cards you want to swap! ${analysis.hint}`,strength:analysis.strength,emoji:"🐻"});
-      } else if(allHintDisc&&s.size===analysis.discard.length){
-        setCoachMsg({text:"Perfect picks! 🌟 That's exactly what I would do! Hit 'Swap Cards' when you're ready!",strength:"great",emoji:"🐻"});
-      } else if(allHintDisc){
-        setCoachMsg({text:`Good choices so far! ${analysis.discard.length>s.size?`You could swap ${analysis.discard.length-s.size} more!`:""}`,strength:"good",emoji:"🐻"});
-      } else if(selHintKeep){
-        setCoachMsg({text:"Hmm, are you sure? 🤔 That card is part of your best hand! You might want to keep it! Look for the 👋 cards instead.",strength:"weak",emoji:"🐻"});
+        setCoachState({emoji:analysis.coachEmoji,line:analysis.coachLine,
+          bg:analysis.strength>0.5?"#d1fae5":analysis.strength>0.2?"#fef3c7":"#fde8ea"});
+      } else if(allGood&&s.size===analysis.discard.length){
+        setCoachState({emoji:"⭐",line:"Perfect picks!",bg:"#d1fae5"});
+      } else if(pickedKeep){
+        setCoachState({emoji:"😨",line:"Keep that one! It matches!",bg:"#fde8ea"});
       } else {
-        setCoachMsg({text:`You've picked ${s.size} card${s.size>1?"s":""} to swap. Hit 'Swap Cards' when ready, or tap cards to change your mind!`,strength:"okay",emoji:"🐻"});
+        setCoachState({emoji:"👍",line:`Swapping ${s.size}. Tap the button!`,bg:"#fef3c7"});
       }
     }
   };
 
-  const doDiscard=()=>{
-    setIsNew(true);
-    // CPU discard
+  const doSwap=()=>{
     const cpuDisc=cpuDiscard(cpuCards);
     const cpuKept=cpuCards.filter(c=>!cpuDisc.includes(c.id));
-    setCpuDiscarded(cpuDisc.length);
-    let deckCopy=[...deck];
-    const cpuNew=deckCopy.splice(0,cpuDisc.length);
-    const newCpu=[...cpuKept,...cpuNew];
-    setCpuCards(newCpu);
-
-    // My discard
-    const selArr=[...selected];
-    const myKept=myCards.filter(c=>!selArr.includes(c.id));
-    const myNew=deckCopy.splice(0,selArr.length);
-    const newMy=[...myKept,...myNew];
-    setMyCards(newMy);setDeck(deckCopy);setSelected(new Set());
-    setPhase("drawing");
-
-    setTimeout(()=>{
-      const newA=analyzeHand(newMy);
-      const improved=evalHand(newMy).rank>(analysis?evalHand(myCards).rank:-1);
-      setAnalysis(newA);
-      setCoachMsg({
-        text:`You swapped ${selArr.length} card${selArr.length!==1?"s":""}${cpuDisc.length>0?` and the robot swapped ${cpuDisc.length}`:""}.${improved?` 🎉 Your hand got BETTER! You now have: ${newA.handName}!`:` You now have: ${newA.handName}. ${newA.strength==="weak"?"That's okay — not every draw works out!":"Not bad!"}`} Ready for the showdown?`,
-        strength:improved?"great":newA.strength,emoji:"🐻",
-      });
-      setIsNew(false);
-    },500);
-  };
-
-  const keepAll=()=>{
-    setSelected(new Set());
-    setIsNew(true);
-    // CPU still discards
-    const cpuDisc=cpuDiscard(cpuCards);
-    const cpuKept=cpuCards.filter(c=>!cpuDisc.includes(c.id));
-    setCpuDiscarded(cpuDisc.length);
-    let deckCopy=[...deck];
-    const cpuNew=deckCopy.splice(0,cpuDisc.length);
+    setCpuDiscardCount(cpuDisc.length);
+    let dk=[...deck];
+    const cpuNew=dk.splice(0,cpuDisc.length);
     setCpuCards([...cpuKept,...cpuNew]);
-    setDeck(deckCopy);
-    setPhase("drawing");
-    setTimeout(()=>{
-      setCoachMsg({text:`You kept all your cards! Smart if you like your hand! The robot swapped ${cpuDisc.length} card${cpuDisc.length!==1?"s":""}. Ready for the showdown?`,strength:analysis?.strength||"good",emoji:"🐻"});
-      setIsNew(false);
-    },400);
+
+    const selArr=[...selected];
+    if(selArr.length===0){
+      /* keep all */
+      setDeck(dk);setSwapped(true);setAnimKey(k=>k+1);
+      const pa=analyzeHand(myCards);setPostSwapAnalysis(pa);
+      setCoachState({emoji:"💪",line:"Kept them all! Showdown time!",bg:"#d1fae5"});
+      return;
+    }
+
+    const myKept=myCards.filter(c=>!selArr.includes(c.id));
+    const myNew=dk.splice(0,selArr.length);
+    const newHand=[...myKept,...myNew];
+    setMyCards(newHand);setDeck(dk);setSelected(new Set());
+    setSwapped(true);setAnimKey(k=>k+1);
+
+    const pa=analyzeHand(newHand);setPostSwapAnalysis(pa);
+    const oldRank=evalHand(myCards).rank;const newRank=evalHand(newHand).rank;
+    if(newRank>oldRank){
+      setCoachState({emoji:"🎉",line:"Your hand got BETTER!",bg:"#d1fae5"});
+    } else if(newRank===oldRank){
+      setCoachState({emoji:"🙂",line:"Same hand. Let's go!",bg:"#fef3c7"});
+    } else {
+      setCoachState({emoji:"😅",line:"Didn't improve. That's okay!",bg:"#fde8ea"});
+    }
   };
 
   const showdown=()=>{
     const myR=evalHand(myCards);const cpuR=evalHand(cpuCards);
-    let winner,msg;
+    let winner;
     if(myR.rank>cpuR.rank){
-      winner="you";
-      setMyChips(c=>c+pot);
-      msg=`🎉🎉🎉 YOU WIN! Your ${myR.name} beats the robot's ${cpuR.name}! You won $${pot}! Amazing!`;
+      winner="you";setMyChips(c=>c+pot);
+      setCoachState({emoji:"🥳",line:"YOU WIN!!!",bg:"#d1fae5"});
     } else if(cpuR.rank>myR.rank){
-      winner="cpu";
-      setCpuChips(c=>c+pot);
-      msg=`The robot wins this one with ${cpuR.name}. Your ${myR.name} wasn't strong enough. That's okay — let's try again!`;
+      winner="cpu";setCpuChips(c=>c+pot);
+      setCoachState({emoji:"🐻",line:"Robot wins. Next time!",bg:"#fde8ea"});
     } else {
-      winner="tie";
-      setMyChips(c=>c+pot/2);setCpuChips(c=>c+pot/2);
-      msg=`It's a tie! You both had ${myR.name}. The pot gets split. What a match!`;
+      winner="tie";setMyChips(c=>c+pot/2);setCpuChips(c=>c+pot/2);
+      setCoachState({emoji:"🤝",line:"It's a tie! Split the pot!",bg:"#fef3c7"});
     }
-    setPot(0);
-    setResult({winner,myHand:myR.name,cpuHand:cpuR.name});
-    setCoachMsg({text:msg,strength:winner==="you"?"amazing":winner==="tie"?"good":"weak",emoji:winner==="you"?"🎉":"🐻"});
-    setPhase("showdown");
-    onResult(winner==="you");
+    setPot(0);setResult({winner,myHand:myR.name,cpuHand:cpuR.name});
+    setPhase("showdown");onResult(winner==="you");
   };
 
   const fold=()=>{
     setCpuChips(c=>c+pot);setPot(0);
     setResult({winner:"fold"});
-    setCoachMsg({text:"You folded! That's okay — smart players fold when their hand is weak. Saving chips for a better hand is a PRO move! 🧠",strength:"okay",emoji:"🐻"});
-    setPhase("showdown");
-    onResult(false);
+    setCoachState({emoji:"🧠",line:"Smart fold! Save your chips!",bg:"#fef3c7"});
+    setPhase("showdown");onResult(false);
   };
+
+  const reset=()=>{
+    setPhase("ready");setMyCards([]);setCpuCards([]);setResult(null);
+    setAnalysis(null);setPostSwapAnalysis(null);setSelected(new Set());
+    setCpuDiscardCount(0);setSwapped(false);
+    setCoachState({emoji:"🐻",line:myChips<5?"Out of chips! Resetting!":"Ready for another?",bg:"#f0f4ff"});
+    if(myChips<5){setMyChips(100);setCpuChips(100);}
+  };
+
+  /* figure out card action for rendering */
+  function cardAction(c){
+    if(phase==="showdown"||!currentAnalysis) return null;
+    if(selected.has(c.id)) return "selected";
+    if(swapped) return null; /* after swap, no hints */
+    if(currentAnalysis.discard.includes(c.id)) return "discard";
+    if(currentAnalysis.keep.includes(c.id)) return "keep";
+    return null;
+  }
+  function cardGroup(c){
+    if(!currentAnalysis) return null;
+    const gi=currentAnalysis.cardGroups[c.id];
+    if(gi===undefined||gi===null) return null;
+    return GROUP_COLORS[gi%GROUP_COLORS.length];
+  }
 
   const isShowdown=phase==="showdown";
 
   return (
     <div style={{padding:16}}>
-      <style>{`
-        @keyframes cardPop { from{opacity:0;transform:translateY(20px) scale(0.8)} to{opacity:1;transform:translateY(0) scale(1)} }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-        @keyframes confettiBurst { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-120px) scale(0.3)} }
-      `}</style>
-
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",gap:8}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <Btn onClick={onBack} color="#888" size="sm">← Back</Btn>
-          <h2 style={{fontFamily:"'Lilita One'",fontSize:20,color:"#2a9d8f",margin:0}}>🎮 Five Card Draw</h2>
+          <SmallBtn onClick={onBack}>← Back</SmallBtn>
+          <span style={{fontFamily:"'Lilita One'",fontSize:18,color:"#2a9d8f"}}>🎮 Five Card Draw</span>
         </div>
-        <label style={{fontFamily:"'Fredoka'",fontSize:13,color:"#888",display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}>
-          <input type="checkbox" checked={showHints} onChange={e=>setShowHints(e.target.checked)} style={{width:18,height:18,accentColor:"#2a9d8f"}}/>
-          Show Hints
-        </label>
       </div>
 
       {/* Coach */}
-      <CoachBubble text={coachMsg.text} strength={coachMsg.strength} emoji={coachMsg.emoji}/>
+      <CoachFace emoji={coachState.emoji} line={coachState.line} bgColor={coachState.bg}/>
 
-      {/* Table */}
-      <div style={{
-        background:"linear-gradient(170deg,#1a5c38,#14532d)",
-        borderRadius:28,padding:"20px 14px",marginBottom:14,
-        boxShadow:"inset 0 4px 30px #00000055,0 6px 24px #00000020",
-        border:"4px solid #c9a85c",position:"relative",overflow:"hidden",
-      }}>
-        {/* Felt texture overlay */}
-        <div style={{position:"absolute",inset:0,opacity:0.04,
-          backgroundImage:"radial-gradient(circle,#fff 1px,transparent 1px)",backgroundSize:"12px 12px",pointerEvents:"none"}}/>
-
-        {/* CPU area */}
-        <div style={{textAlign:"center",marginBottom:16}}>
-          <div style={{fontFamily:"'Fredoka'",fontSize:13,color:"#fff9",marginBottom:6}}>
-            🤖 Robot {cpuDiscarded>0&&phase!=="dealt"?`(swapped ${cpuDiscarded})`:""}
-          </div>
-          <div style={{display:"flex",gap:6,justifyContent:"center"}}>
-            {cpuCards.length>0?cpuCards.map((c,i)=>
-              <PlayingCard key={c.id} card={c} faceDown={!isShowdown}/>
-            ):Array.from({length:5},(_,i)=>
-              <div key={i} style={{width:78,height:112,borderRadius:14,border:"2px dashed #ffffff22",background:"#ffffff08"}}/>
-            )}
-          </div>
-          <div style={{marginTop:8}}><ChipStack chips={cpuChips}/></div>
-        </div>
-
-        {/* Pot */}
-        {pot>0&&(
-          <div style={{textAlign:"center",margin:"8px 0 14px"}}>
-            <span style={{
-              fontFamily:"'Lilita One'",fontSize:22,color:"#ffd60a",
-              background:"#00000055",padding:"6px 22px",borderRadius:24,
-              boxShadow:"0 0 20px #ffd60a22",
-            }}>🏆 Pot: ${pot}</span>
+      {/* Table + Meter side by side */}
+      <div style={{display:"flex",gap:12,marginBottom:14}}>
+        {/* Meter (only during play) */}
+        {phase!=="ready"&&currentAnalysis&&(
+          <div style={{flexShrink:0,animation:"fadeUp 0.5s both"}}>
+            <StrengthMeter value={currentAnalysis.strength}/>
           </div>
         )}
 
-        {/* My cards */}
-        <div style={{textAlign:"center"}}>
-          <div style={{fontFamily:"'Fredoka'",fontSize:13,color:"#fff9",marginBottom:8}}>🙋 Your Cards {phase==="discarding"&&selected.size>0?`(${selected.size} selected to swap)`:""}</div>
-          <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-            {myCards.length>0?myCards.map((c,i)=>(
-              <PlayingCard key={c.id} card={c}
-                selected={selected.has(c.id)}
-                hintDiscard={showHints&&analysis?.discard.includes(c.id)&&!selected.has(c.id)&&(phase==="dealt"||phase==="discarding")}
-                hintKeep={showHints&&analysis?.keep.includes(c.id)&&!selected.has(c.id)&&(phase==="dealt"||phase==="discarding")}
-                onClick={()=>toggleCard(c.id)}
-                disabled={phase!=="dealt"&&phase!=="discarding"}
-                isNew={isNew} delay={i*80}
-              />
-            )):Array.from({length:5},(_,i)=>
-              <div key={i} style={{width:78,height:112,borderRadius:14,border:"2px dashed #ffffff22",background:"#ffffff08"}}/>
-            )}
-          </div>
-          <div style={{marginTop:10}}><ChipStack chips={myChips}/></div>
-        </div>
-      </div>
-
-      {/* Hint legend */}
-      {showHints&&(phase==="dealt"||phase==="discarding")&&analysis&&(
+        {/* Table */}
         <div style={{
-          display:"flex",gap:16,justifyContent:"center",marginBottom:10,
-          fontFamily:"'Fredoka'",fontSize:13,color:"#666",flexWrap:"wrap",
+          flex:1,background:"linear-gradient(170deg,#1a5c38,#14532d)",
+          borderRadius:24,padding:"16px 10px",
+          boxShadow:"inset 0 4px 30px #00000055,0 6px 24px #00000020",
+          border:"4px solid #c9a85c",position:"relative",overflow:"hidden",
+          minHeight:300,
         }}>
-          <span>✅ = Keep</span>
-          <span>👋 = Swap this one</span>
-          <span style={{color:"#f72585"}}>SWAP = You picked it</span>
-        </div>
-      )}
+          {/* felt texture */}
+          <div style={{position:"absolute",inset:0,opacity:0.03,
+            backgroundImage:"radial-gradient(circle,#fff 1px,transparent 1px)",backgroundSize:"12px 12px",pointerEvents:"none"}}/>
 
-      {/* Action buttons */}
-      <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap",marginBottom:14}}>
-        {phase==="ready"&&(
-          <Btn onClick={deal} color="#2a9d8f" size="lg" disabled={myChips<5}>
-            {myChips<5?"Out of chips!":"Deal Cards! 🃏"}
-          </Btn>
-        )}
-        {(phase==="dealt"||phase==="discarding")&&(
-          <>
-            <Btn onClick={doDiscard} color="#4361ee" size="lg" disabled={selected.size===0}>
-              Swap {selected.size} Card{selected.size!==1?"s":""} 🔄
-            </Btn>
-            <Btn onClick={keepAll} color="#2a9d8f" outline>Keep All ✋</Btn>
-            <Btn onClick={fold} color="#888" size="sm">Fold 🫣</Btn>
-          </>
-        )}
-        {phase==="drawing"&&(
-          <>
-            <Btn onClick={()=>{setPot(p=>p+10);setMyChips(c=>c-5);setCpuChips(c=>c-5);setCoachMsg({text:"You raised $5! Bold move! 💪 Now let's see who wins!",strength:"good",emoji:"🐻"});}} color="#f72585" disabled={myChips<5}>Bet $5 🪙</Btn>
-            <Btn onClick={showdown} color="#ffd60a" size="lg"><span style={{color:"#1a1a2e"}}>Showdown! 🃏</span></Btn>
-          </>
-        )}
-        {phase==="showdown"&&(
-          <Btn onClick={()=>{setPhase("ready");setMyCards([]);setCpuCards([]);setResult(null);setAnalysis(null);setSelected(new Set());setCpuDiscarded(0);
-            setCoachMsg({text:myChips<5?"Uh oh, you're out of chips! But that's how you learn! 🐻":"Great game! Ready for another hand? Tap Deal!",strength:"good",emoji:"🐻"});
-          }} color="#2a9d8f" size="lg">
-            {myChips<5?"Start Over 🔄":"New Hand! 🃏"}
-          </Btn>
-        )}
-      </div>
+          {/* CPU */}
+          <div style={{textAlign:"center",marginBottom:12}}>
+            <ChipDisplay label={"🤖 Robot"+(cpuDiscardCount>0&&phase!=="ready"?` (swapped ${cpuDiscardCount})`:"")} chips={cpuChips} color="#ff9f9f"/>
+            <div style={{display:"flex",gap:5,justifyContent:"center",marginTop:6}}>
+              {cpuCards.length>0?cpuCards.map((c,i)=>
+                <PlayingCard key={c.id+animKey} card={c} faceDown={!isShowdown} animDelay={i*60}/>
+              ):Array.from({length:5},(_,i)=>
+                <div key={i} style={{width:74,height:106,borderRadius:14,border:"2px dashed #ffffff22",background:"#ffffff08"}}/>
+              )}
+            </div>
+          </div>
 
-      {/* Result banner */}
-      {result&&result.winner!=="fold"&&(
-        <div style={{
-          background:result.winner==="you"?"linear-gradient(135deg,#d4edda,#c3e6cb)":result.winner==="tie"?"#fff3cd":"#f8d7da",
-          borderRadius:20,padding:18,textAlign:"center",fontFamily:"'Fredoka'",
-          border:`3px solid ${result.winner==="you"?"#2a9d8f":result.winner==="tie"?"#ffc107":"#e63946"}`,
-          marginBottom:12,boxShadow:"0 4px 20px #00000012",position:"relative",overflow:"hidden",
-        }}>
-          {result.winner==="you"&&(
-            <div style={{position:"absolute",inset:0,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
-              {["🎉","⭐","🌟","✨","🎊"].map((e,i)=>(
-                <span key={i} style={{
-                  fontSize:24,position:"absolute",
-                  left:`${15+i*18}%`,top:"10%",
-                  animation:`confettiBurst 1.5s ${i*0.15}s both`,
-                }}>{e}</span>
-              ))}
+          {/* Pot */}
+          {pot>0&&(
+            <div style={{textAlign:"center",margin:"6px 0 10px"}}>
+              <span style={{
+                fontFamily:"'Lilita One'",fontSize:20,color:"#ffd60a",
+                background:"#00000055",padding:"5px 20px",borderRadius:22,
+              }}>🏆 ${pot}</span>
             </div>
           )}
-          <div style={{fontSize:22,fontWeight:700,marginBottom:4,position:"relative"}}>
-            {result.winner==="you"?"🎉 YOU WIN! 🎉":result.winner==="tie"?"🤝 Tie Game!":"🤖 Robot Wins!"}
-          </div>
-          <div style={{fontSize:14,color:"#555",position:"relative"}}>
-            You: <b>{result.myHand}</b> &nbsp;vs&nbsp; Robot: <b>{result.cpuHand}</b>
+
+          {/* My cards */}
+          <div style={{textAlign:"center"}}>
+            <div style={{display:"flex",gap:7,justifyContent:"center",flexWrap:"wrap"}}>
+              {myCards.length>0?myCards.map((c,i)=>(
+                <PlayingCard key={c.id+animKey} card={c}
+                  action={cardAction(c)}
+                  groupColor={cardGroup(c)}
+                  selected={selected.has(c.id)}
+                  onClick={()=>toggleCard(c.id)}
+                  disabled={phase!=="dealt"||swapped}
+                  animDelay={i*80}
+                />
+              )):Array.from({length:5},(_,i)=>
+                <div key={i} style={{width:74,height:106,borderRadius:14,border:"2px dashed #ffffff22",background:"#ffffff08"}}/>
+              )}
+            </div>
+            <div style={{marginTop:8}}>
+              <ChipDisplay label="🙋 You" chips={myChips}/>
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* How to play reminder */}
-      {phase==="ready"&&(
+      {/* Legend (only during card selection) */}
+      {phase==="dealt"&&!swapped&&analysis&&(
         <div style={{
-          background:"#f8f6f0",borderRadius:18,padding:"16px 18px",
-          fontFamily:"'Fredoka'",fontSize:14,color:"#666",lineHeight:1.6,
-          border:"2px dashed #e0d8c8",
+          display:"flex",gap:14,justifyContent:"center",marginBottom:10,
+          fontFamily:"'Fredoka'",fontSize:12,color:"#777",flexWrap:"wrap",
+          animation:"fadeUp 0.4s both",
         }}>
-          <div style={{fontFamily:"'Lilita One'",fontSize:16,color:"#1a1a2e",marginBottom:6}}>📖 How Five Card Draw Works:</div>
-          <div style={{display:"flex",flexDirection:"column",gap:6}}>
-            <div>1️⃣ <b>Deal</b> — You and the robot each get 5 cards</div>
-            <div>2️⃣ <b>Look</b> — Coach Bear tells you what you have</div>
-            <div>3️⃣ <b>Swap</b> — Pick cards to throw away and get new ones</div>
-            <div>4️⃣ <b>Showdown</b> — Flip the cards and see who wins!</div>
-          </div>
+          <span>✨ Float up = Keep</span>
+          <span>👋 Sink down = Swap</span>
+          <span style={{color:"#e63946"}}>SWAP = You picked it</span>
         </div>
       )}
 
-      {myChips<=0&&phase==="showdown"&&(
-        <div style={{textAlign:"center",marginTop:10}}>
-          <Btn onClick={()=>{setMyChips(100);setCpuChips(100);}} color="#4361ee">Reset Chips to $100 🔄</Btn>
+      {/* ONE BIG BUTTON at a time */}
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:10}}>
+        {phase==="ready"&&(
+          <BigButton onClick={deal} disabled={myChips<5}>
+            {myChips<5?"Out of chips!":"Deal! 🃏"}
+          </BigButton>
+        )}
+
+        {phase==="dealt"&&!swapped&&(
+          <>
+            <BigButton onClick={doSwap} color={selected.size>0?"#4361ee":"#2a9d8f"}>
+              {selected.size>0?`Swap ${selected.size} Card${selected.size>1?"s":""}! 🔄`:"Keep All & Continue ✋"}
+            </BigButton>
+            <SmallBtn onClick={fold} color="#999">Fold 🫣</SmallBtn>
+          </>
+        )}
+
+        {phase==="dealt"&&swapped&&(
+          <BigButton onClick={showdown} color="#f59e0b">
+            Showdown! 🃏
+          </BigButton>
+        )}
+
+        {phase==="showdown"&&(
+          <>
+            {result&&result.winner!=="fold"&&(
+              <div style={{
+                background:result.winner==="you"?"linear-gradient(135deg,#d1fae5,#a7f3d0)":result.winner==="tie"?"#fef3c7":"#fde8ea",
+                borderRadius:22,padding:18,textAlign:"center",fontFamily:"'Fredoka'",width:"100%",maxWidth:360,
+                border:`3px solid ${result.winner==="you"?"#10b981":result.winner==="tie"?"#f59e0b":"#e63946"}`,
+                position:"relative",overflow:"hidden",animation:"fadeUp 0.4s both",
+              }}>
+                {result.winner==="you"&&(
+                  <div style={{position:"absolute",inset:0,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
+                    {["🎉","⭐","🌟","✨","🎊","💫","🎉","⭐"].map((e,i)=>(
+                      <span key={i} style={{
+                        fontSize:28,position:"absolute",
+                        left:`${8+i*12}%`,top:`${10+Math.random()*20}%`,
+                        animation:`confetti 2s ${i*0.1}s both`,
+                      }}>{e}</span>
+                    ))}
+                  </div>
+                )}
+                <div style={{fontSize:26,fontWeight:700,position:"relative",marginBottom:4}}>
+                  {result.winner==="you"?"🎉 YOU WIN! 🎉":result.winner==="tie"?"🤝 Tie!":"🤖 Robot Wins"}
+                </div>
+                <div style={{fontSize:14,color:"#555",position:"relative"}}>
+                  You: <b>{result.myHand}</b> — Robot: <b>{result.cpuHand}</b>
+                </div>
+              </div>
+            )}
+            <BigButton onClick={reset} color="#2a9d8f">
+              {myChips<5?"Reset & Play Again! 🔄":"Next Hand! 🃏"}
+            </BigButton>
+          </>
+        )}
+      </div>
+
+      {/* How to play (only on ready screen) */}
+      {phase==="ready"&&!result&&(
+        <div style={{
+          background:"#f8f6f0",borderRadius:20,padding:"18px 20px",marginTop:16,
+          fontFamily:"'Fredoka'",fontSize:15,color:"#666",lineHeight:1.7,
+          border:"2px dashed #e0d8c8",animation:"fadeUp 0.5s 0.2s both",
+        }}>
+          <div style={{fontFamily:"'Lilita One'",fontSize:17,color:"#1a1a2e",marginBottom:6}}>📖 How to Play</div>
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            <div>1️⃣ Get 5 cards</div>
+            <div>2️⃣ Cards float up = keep them!</div>
+            <div>3️⃣ Cards sink down = swap them!</div>
+            <div>4️⃣ Flip and see who wins!</div>
+          </div>
         </div>
       )}
     </div>
@@ -774,13 +874,7 @@ export default function PokerPals(){
 
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(160deg,#fef9ef,#f0e6d3)",maxWidth:540,margin:"0 auto",paddingBottom:40}}>
-      <style>{fonts}{`
-        @keyframes cardPop { from{opacity:0;transform:translateY(20px) scale(0.8)} to{opacity:1;transform:translateY(0) scale(1)} }
-        @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
-        @keyframes confettiBurst { 0%{opacity:1;transform:translateY(0) scale(1)} 100%{opacity:0;transform:translateY(-100px) scale(0.2)} }
-        * { box-sizing: border-box; }
-      `}</style>
+      <style>{GLOBAL_CSS}</style>
       {screen==="home"&&<HomeScreen onNav={setScreen} stats={stats}/>}
       {screen==="hands"&&<HandsScreen onBack={()=>setScreen("home")}/>}
       {screen==="quiz"&&<QuizScreen onBack={()=>setScreen("home")} onScore={(ok)=>setStats(s=>({...s,quizCorrect:s.quizCorrect+(ok?1:0),quizTotal:s.quizTotal+1}))}/>}
