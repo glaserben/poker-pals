@@ -312,7 +312,7 @@ function HomeScreen({onNav,stats}){
         }}>
           {stats.handsPlayed>0&&<span>🎮 <b style={{color:"#2a9d8f"}}>{stats.handsPlayed}</b> hands played</span>}
           {stats.wins>0&&<span>🏆 <b style={{color:"#4361ee"}}>{stats.wins}</b> wins</span>}
-          {stats.quizTotal>0&&<span>🧠 <b style={{color:"#7209b7"}}>{stats.quizCorrect}/{stats.quizTotal}</b> quiz</span>}
+          {stats.quizTotal>0&&<span>🧠 <b style={{color:"#7209b7"}}>{stats.quizCorrect}{"/"}{stats.quizTotal}</b> quiz</span>}
         </div>)}
       </div>
     </div>
