@@ -314,7 +314,6 @@ function HomeScreen({onNav,stats}){
           {stats.wins>0&&<span>🏆 <b style={{color:"#4361ee"}}>{stats.wins}</b> wins</span>}
           {stats.quizTotal>0&&<span>🧠 <b style={{color:"#7209b7"}}>{stats.quizCorrect}{"/"}{stats.quizTotal}</b> quiz</span>}
         </div>)}
-      </div>
     </div>
   );
 }
